@@ -11,7 +11,7 @@ _dotenv.config({ "path": ".env" });
 // Variabili relative a MongoDB ed Express
 import { MongoClient, ObjectId } from "mongodb";
 const DBNAME = "unicorns";
-const connectionString: string = process.env.connectionStringAtlas;
+const connectionString: string = process.env.CONNECTION_STRING;
 const app = _express();
 
 // Variabili generiche
