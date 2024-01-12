@@ -8,12 +8,11 @@ import _cors from "cors";
 //lettura delle password
 _dotenv.config({"path":".env"})
 
-
 //MongoDB ed express
 import {MongoClient, ObjectId} from 'mongodb'
 
 const DBNAME =process.env.DBNAME
-const connectionString=process.env.connectionStringAtlas
+const connectionString=process.env.CONNECTION_STRING;
 const app=_express()
 
 
