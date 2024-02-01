@@ -1,74 +1,97 @@
-import _http from 'http'
-import _url from 'url'
-import _fs from 'fs'
-import _express from 'express'
-import _dotenv from 'dotenv'
+import _http from "http";
+import _url from "url";
+import _fs from "fs";
+import _express from "express";
+import _dotenv from "dotenv";
 import _cors from "cors";
 
-//lettura delle password
-_dotenv.config({ "path": ".env" })
+// Lettura delle password e parametri fondamentali
+_dotenv.config({ "path": ".env" });
 
-//MongoDB ed express
-import { MongoClient, ObjectId } from 'mongodb'
+// Variabili relative a MongoDB ed Express
+import { MongoClient, ObjectId } from "mongodb";
+const DBNAME = process.env.DBNAME;
+const CONNECTION_STRING: string = process.env.CONNECTION_STRING;
+const app = _express();
 
-const DBNAME = process.env.DBNAME
-const connectionString = process.env.CONNECTION_STRING;
-const app = _express()
-
-
-const port: number = parseInt(process.env.PORT)
-let paginaErrore: any
-const server: any = _http.createServer(app)
-
-const collectionName = "recipes"
-
-//se si specifica l'ip, si mette il server in ascolto su una singola interfaccia
-//se viene omesso il server è in ascolto su tutte le 3 interfaccie (loopback,scheda ethernet, scheda wi-fi)
-
-server.listen(port, () => {
-    init()
-    console.log("Il server è attivo sulla porta: " + port)
-})
+// Creazione ed avvio del server
+// app è il router di Express, si occupa di tutta la gestione delle richieste http
+const PORT: number = parseInt(process.env.PORT);
+let paginaErrore;
+const server = _http.createServer(app);
+// Il secondo parametro facoltativo ipAddress consente di mettere il server in ascolto su una delle interfacce della macchina, se non lo metto viene messo in ascolto su tutte le interfacce (3 --> loopback e 2 di rete)
+server.listen(PORT, () => {
+    init();
+    console.log(`Il Server è in ascolto sulla porta ${PORT}`);
+});
 
 function init() {
     _fs.readFile("./static/error.html", function (err, data) {
-        if (err)
-            paginaErrore = "<h1>Risorsa non trovata</h1>"
-        else
-            paginaErrore = data.toString()
-    })
+        if (err) {
+            paginaErrore = `<h1>Risorsa non trovata</h1>`;
+        }
+        else {
+            paginaErrore = data.toString();
+        }
+    });
 }
 
+//********************************************************************************************//
+// Routes middleware
+//********************************************************************************************//
 
-/********************************************************************************************************************************
- * ROUTES MIDDLEWARE
- * ****************************************************************************************************************/
-
-//1. Request log
+// 1. Request log
 app.use("/", (req: any, res: any, next: any) => {
-    console.log("------> " + req.method + ":" + req.originalUrl);
-    next()
-})
+    console.log(`-----> ${req.method}: ${req.originalUrl}`);
+    next();
+});
 
+// 2. Gestione delle risorse statiche
+// .static() è un metodo di express che ha già implementata la firma di sopra. Se trova il file fa la send() altrimenti fa la next()
+app.use("/", _express.static("./static"));
 
-//2. Gestione risorse statiche
-app.use("/", _express.static("./static"))
+// 3. Lettura dei parametri POST di req["body"] (bodyParser)
+// .json() intercetta solo i parametri passati in json nel body della http request
+app.use("/", _express.json({ "limit": "50mb" }));
+// .urlencoded() intercetta solo i parametri passati in urlencoded nel body della http request
+app.use("/", _express.urlencoded({ "limit": "50mb", "extended": true }));
 
-
-//3. Lettura parametri body
-app.use("/", _express.json({ "limit": "50mb" }))
-app.use("/", _express.urlencoded({ "limit": "50mb", "extended": true }))
-
-//4. Log parameters GET and POST
+// 4. Log dei parametri GET, POST, PUT, PATCH, DELETE
 app.use("/", (req: any, res: any, next: any) => {
-    if (Object.keys(req["query"]).length > 0)
-        console.log("        " + JSON.stringify(req["query"]))
-    if (Object.keys(req["body"]).length > 0)
-        console.log("        " + JSON.stringify(req["body"]))
-    next()
-})
+    if (Object.keys(req["query"]).length > 0) {
+        console.log(`       ${JSON.stringify(req["query"])}`);
+    }
+    if (Object.keys(req["body"]).length > 0) {
+        console.log(`       ${JSON.stringify(req["body"])}`);
+    }
+    next();
+});
 
 // 5. Controllo degli accessi tramite CORS
+const whitelist = [
+    "http://edoardopizzorno-crudserver.onrender.com",	// porta 80 (default)
+    "https://edoardopizzorno-crudserver.onrender.com",	// porta 443 (default)
+    "http://localhost:3000",
+    "https://localhost:3001",
+    "http://localhost:4200" // server angular
+];
+// Procedura che utilizza la whitelist, accetta solo le richieste presenti nella whitelist
+const corsOptions = {
+    origin: function (origin, callback) {
+        if (!origin) // browser direct call
+            return callback(null, true);
+        if (whitelist.indexOf(origin) === -1) {
+            var msg = `The CORS policy for this site does not allow access from the specified Origin.`
+            return callback(new Error(msg), false);
+        }
+        else
+            return callback(null, true);
+    },
+    credentials: true
+};
+app.use("/", _cors(corsOptions));
+// Procedura che lascia passare tutto, accetta tutte le richieste
+/*
 const corsOptions = {
     origin: function (origin, callback) {
         return callback(null, true);
@@ -76,128 +99,89 @@ const corsOptions = {
     credentials: true
 };
 app.use("/", _cors(corsOptions));
+*/
 
-/*********************************************************************************************************************************** */
-//Route finali risposta al client
-/*********************************************************************************************************************************** */
-app.get("/api/richiesta1", async (req, res, next) => {
-    const client = new MongoClient(connectionString);
-    await client.connect()//apre la connessione
-    let nome: string = req["query"]["nome"]
-    let collection: any = client.db(DBNAME).collection(collectionName);
-    let rq: any = collection.findOne({ "name": nome })
-    rq.then((data) => {
-        res.send(data)
-    })
-    rq.catch((err) => {
-        res.status(500)
-        res.send("Errore esecuzione query: " + err)
-    })
-    rq.finally(() => {
-        client.close()
-    })
-})
+//********************************************************************************************//
+// Routes finali di risposta al client
+//********************************************************************************************//
 
 app.get("/api/getCollections", async (req, res, next) => {
-    const client = new MongoClient(connectionString)
-    await client.connect()
-    let db = client.db(DBNAME)
-    let request = db.listCollections().toArray()
-    request.then((data) => {
-        res.send(data)
-    })
-    request.catch((err) => {
-        res.status(500).send("Errore lettura collezioni: " + err)
-    })
-    request.finally(() => {
-        client.close()
-    })
-})
+    const client = new MongoClient(CONNECTION_STRING);
+    await client.connect();
+    let db = client.db(DBNAME);
+    // db.listCollections() richiede al server l'elenco delle collezioni presenti nel db
+    let rq = db.listCollections().toArray();
+    rq.then((data) => res.send(data));
+    rq.catch((err) => res.status(500).send(`Errore nella lettura delle collezioni: ${err}`));
+    rq.finally(() => client.close());
+});
 
 app.get("/api/:collection", async (req, res, next) => {
-    let filters = req["query"]
-    //console.log(filters)
-    const client = new MongoClient(connectionString)
-    await client.connect()
-    let db = client.db(DBNAME).collection(req.params.collection)
-    let request = db.find(filters).toArray()
-    request.then((data) => {
-        res.send(data)
-    })
-    request.catch((err) => {
-        res.status(500).send("Errore lettura collezioni: " + err)
-    })
-    request.finally(() => {
-        client.close()
-    })
-})
+    let filters = req["query"];
+    let selectedCollection = req["params"].collection;
+    const client = new MongoClient(CONNECTION_STRING);
+    await client.connect();
+    let collection = client.db(DBNAME).collection(selectedCollection);
+    let rq = collection.find(filters).toArray();
+    rq.then((data) => res.send(data));
+    rq.catch((err) => res.status(500).send(`Errore esecuzione query: ${err}`));
+    rq.finally(() => client.close());
+});
+
 app.get("/api/:collection/:id", async (req, res, next) => {
-    let collection = req["params"].collection
-    let id = req["params"]["id"]
-    let objId
+    let selectedCollection = req["params"].collection;
+    let id = req["params"].id;
+    let objId;
     if (ObjectId.isValid(id)) {
-        objId = new ObjectId(req["params"].id)
+        objId = new ObjectId(req["params"].id);
     }
-    else
-        objId = id as unknown as ObjectId
-    const client = new MongoClient(connectionString)
-    await client.connect()
-    let db = client.db(DBNAME).collection(collection)
-    let request = db.findOne({ "_id": objId })
-    request.then((data) => {
-        res.send(data)
-    })
-    request.catch((err) => {
-        res.status(500).send("Errore esecuzione query: " + err)
-    })
-    request.finally(() => {
-        client.close()
-    })
-})
+    else {
+        objId = id as unknown as ObjectId;
+    }
+    const client = new MongoClient(CONNECTION_STRING);
+    await client.connect();
+    let collection = client.db(DBNAME).collection(selectedCollection);
+    let rq = collection.findOne({ "_id": objId });
+    rq.then((data) => res.send(data));
+    rq.catch((err) => res.status(500).send(`Errore esecuzione query: ${err}`));
+    rq.finally(() => client.close());
+});
+
 app.post("/api/:collection", async (req, res, next) => {
-    let collection = req["params"].collection
-    let newRecord = req["body"]
-    const client = new MongoClient(connectionString)
-    await client.connect()
-    let db = client.db(DBNAME).collection(collection)
-    let request = db.insertOne(newRecord)
-    request.then((data) => {
-        res.send(data)
-    })
-    request.catch((err) => {
-        res.status(500).send("Errore esecuzione query: " + err)
-    })
-    request.finally(() => {
-        client.close()
-    })
-})
+    let newRecord = req["body"];
+    let selectedCollection = req["params"].collection;
+    const client = new MongoClient(CONNECTION_STRING);
+    await client.connect();
+    let collection = client.db(DBNAME).collection(selectedCollection);
+    let rq = collection.insertOne(newRecord);
+    rq.then((data) => res.send(data));
+    rq.catch((err) => res.status(500).send(`Errore esecuzione query: ${err}`));
+    rq.finally(() => client.close());
+});
 
 app.delete("/api/:collection/:id", async (req, res, next) => {
-    let collection = req["params"].collection
-    let id = req["params"]["id"]
-    let objId
-    if (ObjectId.isValid(id))
-        objId = new ObjectId(req["params"].id)
-    else
-        objId = id as unknown as ObjectId
-    const client = new MongoClient(connectionString)
-    await client.connect()
-    let db = client.db(DBNAME).collection(collection)
-    let request = db.deleteOne({ "_id": objId })
-    request.then((data) => {
-        res.send(data)
-    })
-    request.catch((err) => {
-        res.status(500).send("Errore esecuzione query: " + err)
-    })
-    request.finally(() => {
-        client.close()
-    })
-})
+    let selectedCollection = req["params"].collection;
+    let id = req["params"].id;
+    let objId;
+    if (ObjectId.isValid(id)) {
+        objId = new ObjectId(req["params"].id);
+    }
+    else {
+        objId = id as unknown as ObjectId;
+    }
+    const client = new MongoClient(CONNECTION_STRING);
+    await client.connect();
+    let collection = client.db(DBNAME).collection(selectedCollection);
+    let rq = collection.deleteOne({ "_id": objId });
+    rq.then((data) => res.send(data));
+    rq.catch((err) => res.status(500).send(`Errore esecuzione query: ${err}`));
+    rq.finally(() => client.close());
+});
+
 app.delete("/api/:collection", async (req, res, next) => {
     let selectedCollection = req["params"].collection;
     let filters = req["body"];
-    const client = new MongoClient(connectionString);
+    const client = new MongoClient(CONNECTION_STRING);
     await client.connect();
     let collection = client.db(DBNAME).collection(selectedCollection);
     let rq = collection.deleteMany(filters);
@@ -206,35 +190,41 @@ app.delete("/api/:collection", async (req, res, next) => {
     rq.finally(() => client.close());
 });
 
+/**
+ * Chiama il metodo PATCH con l'oobligo di specificare dentro il body la ACTION da eseguire.
+ * 
+ * @remarks
+ * Utilizzando questo metodo la PATCH risulta più flessibile.
+ * 
+ * @param id - id del record
+ * @body i nuovi valori da aggiornare e la action da eseguire, ad esempio: { "$inc": { "qta": 1 } }
+ * @returns Un JSON di conferma dell'aggiornamento
+ */
 app.patch("/api/:collection/:id", async (req, res, next) => {
-    let collection = req["params"].collection
-    let id = req["params"]["id"]
-    let objId
-    if (ObjectId.isValid(id))
-        objId = new ObjectId(req["params"].id)
-    else
-        objId = id as unknown as ObjectId
-    let action = req["body"]
-    const client = new MongoClient(connectionString)
-    await client.connect()
-    let db = client.db(DBNAME).collection(collection)
-    let request = db.updateOne({ "_id": objId }, action)
-    request.then((data) => {
-        res.send(data)
-    })
-    request.catch((err) => {
-        res.status(500).send("Errore esecuzione query: " + err)
-    })
-    request.finally(() => {
-        client.close()
-    })
-})
+    let selectedCollection = req["params"].collection;
+    let id = req["params"].id;
+    let objId;
+    if (ObjectId.isValid(id)) {
+        objId = new ObjectId(req["params"].id);
+    }
+    else {
+        objId = id as unknown as ObjectId;
+    }
+    let action = req["body"];
+    const client = new MongoClient(CONNECTION_STRING);
+    await client.connect();
+    let collection = client.db(DBNAME).collection(selectedCollection);
+    let rq = collection.updateOne({ "_id": objId }, action);
+    rq.then((data) => res.send(data));
+    rq.catch((err) => res.status(500).send(`Errore esecuzione query: ${err}`));
+    rq.finally(() => client.close());
+});
 
 app.patch("/api/:collection", async (req, res, next) => {
     let selectedCollection = req["params"].collection;
     let filters = req["body"].filters;
     let action = req["body"].action;
-    const client = new MongoClient(connectionString);
+    const client = new MongoClient(CONNECTION_STRING);
     await client.connect();
     let collection = client.db(DBNAME).collection(selectedCollection);
     let rq = collection.updateMany(filters, action);
@@ -243,42 +233,51 @@ app.patch("/api/:collection", async (req, res, next) => {
     rq.finally(() => client.close());
 });
 
+/**
+ * Chiama il metodo PUT aggiornando il record invece che sostituirlo.
+ * 
+ * @remarks
+ * Utilizzando questo metodo la PUT esegue direttamente il SET del valore ricevuto.
+ * 
+ * @param id - id del record
+ * @body i nuovi valori da aggiornare
+ * @returns Un JSON di conferma dell'aggiornamento
+ */
 app.put("/api/:collection/:id", async (req, res, next) => {
-    let collection = req["params"].collection
-    let id = req["params"]["id"]
-    let objId
-    if (ObjectId.isValid(id))
-        objId = new ObjectId(req["params"].id)
-    else
-        objId = id as unknown as ObjectId
-    let updatedRecord = req["body"]
-    const client = new MongoClient(connectionString)
-    await client.connect()
-    let db = client.db(DBNAME).collection(collection)
-    let request = db.replaceOne({ "_id": objId }, updatedRecord)
-    request.then((data) => {
-        res.send(data)
-    })
-    request.catch((err) => {
-        res.status(500).send("Errore esecuzione query: " + err)
-    })
-    request.finally(() => {
-        client.close()
-    })
-})
+    let selectedCollection = req["params"].collection;
+    let id = req["params"].id;
+    let objId;
+    if (ObjectId.isValid(id)) {
+        objId = new ObjectId(req["params"].id);
+    }
+    else {
+        objId = id as unknown as ObjectId;
+    }
+    let newValues = req["body"];
+    const client = new MongoClient(CONNECTION_STRING);
+    await client.connect();
+    let collection = client.db(DBNAME).collection(selectedCollection);
+    let rq = collection.updateOne({ "_id": objId }, { "$set": newValues });
+    rq.then((data) => res.send(data));
+    rq.catch((err) => res.status(500).send(`Errore esecuzione query: ${err}`));
+    rq.finally(() => client.close());
+});
 
+//********************************************************************************************//
+// Default route e gestione degli errori
+//********************************************************************************************//
 
-/***************************************************************************** *************************************************************/
-//Default route e gestione degli errori
-/************************************************************************************************************************************************ */
 app.use("/", (req, res, next) => {
-    res.status(404)
-    if (req.originalUrl.startsWith("/api/"))
-        res.send("API non disponibile")
-    else
-        res.send(paginaErrore)
-})
+    res.status(404);
+    if (req.originalUrl.startsWith("/api/")) {
+        res.send(`Api non disponibile`);
+    }
+    else {
+        res.send(paginaErrore);
+    }
+});
+
 app.use("/", (err, req, res, next) => {
-    console.log("************* SERVER ERROR ***************\n", err.stack)
-    res.status(500).send(err.message)
-})
+    console.log("************* SERVER ERROR ***************\n", err.stack);
+    res.status(500).send(err.message);
+});
