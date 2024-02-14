@@ -148,7 +148,7 @@ app.get("/api/:collection/:id", async (req, res, next) => {
 });
 
 app.post("/api/:collection", async (req, res, next) => {
-    let newRecord = req["body"];
+    let newRecord = req["body"]["body"];
     let selectedCollection = req["params"].collection;
     const client = new MongoClient(CONNECTION_STRING);
     await client.connect();
