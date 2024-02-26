@@ -210,7 +210,7 @@ app.patch("/api/:collection/:id", async (req, res, next) => {
     else {
         objId = id as unknown as ObjectId;
     }
-    let action = req["body"];
+    let action = req["body"]["body"];
     const client = new MongoClient(CONNECTION_STRING);
     await client.connect();
     let collection = client.db(DBNAME).collection(selectedCollection);
