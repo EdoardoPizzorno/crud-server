@@ -1,5 +1,5 @@
 {
-  "name": "mylibrary",
+  "name": "crud-server-pizzorno",
   "version": "1.0.0",
   "description": "My NPM library",
   "main": "server.js",
@@ -25,5 +25,14 @@
     "Mongo"
   ],
   "author": "piz",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EdoardoPizzorno/crud-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/EdoardoPizzorno/crud-server/issues"
+  },
+  "homepage": "https://github.com/EdoardoPizzorno/crud-server#readme"
 }
